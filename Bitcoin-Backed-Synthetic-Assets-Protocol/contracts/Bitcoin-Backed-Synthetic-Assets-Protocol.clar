@@ -162,3 +162,39 @@
     ERR-ORACLE-DATA-UNAVAILABLE
   )
 )
+
+(define-public (update-collateral-ratio (asset-id uint) (new-ratio uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (asserts! (>= new-ratio MIN-COLLATERALIZATION-RATIO) ERR-INVALID-AMOUNT)
+    (match (map-get? supported-assets { asset-id: asset-id })
+      asset-data (ok (map-set supported-assets 
+        { asset-id: asset-id } 
+        (merge asset-data { collateral-ratio: new-ratio })
+      ))
+      ERR-ASSET-NOT-SUPPORTED
+    )
+  )
+)
+
+
+(define-private (is-oracle (address principal))
+  ;; In a production system, this would check against a list of approved oracles
+  ;; For simplicity, we're just checking if it's the governance address
+  (is-eq address (var-get governance-address))
+)
+
+(define-private (get-price (asset-id uint))
+  (match (map-get? asset-prices { asset-id: asset-id })
+    price-data (begin
+      (asserts! (< (- stacks-block-height (get last-update price-data)) ORACLE-PRICE-EXPIRY) ERR-PRICE-EXPIRED)
+      (ok (get price price-data))
+    )
+    ERR-ORACLE-DATA-UNAVAILABLE
+  )
+)
+
+(define-private (get-btc-price)
+  ;; For simplicity, we're using asset-id 0 as BTC
+  (get-price u0)
+)
