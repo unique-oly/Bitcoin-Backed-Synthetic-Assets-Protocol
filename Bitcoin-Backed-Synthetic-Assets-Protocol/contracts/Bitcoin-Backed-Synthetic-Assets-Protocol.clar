@@ -567,3 +567,115 @@
     )
   )
 )
+
+;; Add liquidity to a pair
+(define-public (add-liquidity (pair-id uint) (amount-a uint) (amount-b uint))
+  (begin
+    (asserts! (not (var-get protocol-paused)) ERR-NOT-AUTHORIZED)
+    (asserts! (> amount-a u0) ERR-INVALID-AMOUNT)
+    (asserts! (> amount-b u0) ERR-INVALID-AMOUNT)
+    
+    (match (map-get? trading-pairs { pair-id: pair-id })
+      pair-data
+      (begin
+        (asserts! (get is-active pair-data) ERR-TRADING-PAIR-NOT-FOUND)
+        
+        ;; In a real implementation, this would transfer the input assets from the sender
+        ;; For this example, we're just updating the reserves
+        
+        ;; Update reserves
+        (map-set trading-pairs
+          { pair-id: pair-id }
+          (merge pair-data {
+            reserve-a: (+ (get reserve-a pair-data) amount-a),
+            reserve-b: (+ (get reserve-b pair-data) amount-b)
+          })
+        )
+        
+        (ok true)
+      )
+      ERR-TRADING-PAIR-NOT-FOUND
+    )
+  )
+)
+
+;; Flash loan data
+(define-map flash-loans
+  { loan-id: uint }
+  {
+    borrower: principal,
+    asset-id: uint,
+    amount: uint,
+    fee: uint,
+    is-active: bool,
+    timestamp: uint
+  }
+)
+
+(define-data-var flash-loan-counter uint u0)
+(define-data-var flash-loan-fee-rate uint u9) ;; 0.09% fee
+
+;; Execute a flash loan
+(define-public (flash-loan (asset-id uint) (amount uint) (callback-contract principal) (callback-function (string-ascii 128)))
+  (begin
+    (asserts! (not (var-get protocol-paused)) ERR-NOT-AUTHORIZED)
+    (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+    (asserts! (is-asset-supported asset-id) ERR-ASSET-NOT-SUPPORTED)
+    
+    (let
+      (
+        (loan-id (var-get flash-loan-counter))
+        (loan-fee (/ (* amount (var-get flash-loan-fee-rate)) u10000))
+      )
+      ;; Check if there's enough liquidity
+      (match (map-get? liquidity-pools { asset-id: asset-id })
+        pool-data
+        (begin
+          (asserts! (>= (get synthetic-balance pool-data) amount) ERR-POOL-INSUFFICIENT-LIQUIDITY)
+          
+          ;; Create the flash loan
+          (map-set flash-loans
+            { loan-id: loan-id }
+            {
+              borrower: tx-sender,
+              asset-id: asset-id,
+              amount: amount,
+              fee: loan-fee,
+              is-active: true,
+              timestamp: stacks-block-height
+            }
+          )
+          
+          ;; Increment loan counter
+          (var-set flash-loan-counter (+ loan-id u1))
+          
+          ;; In a real implementation, this would:
+          ;; 1. Transfer the borrowed assets to the borrower
+          ;; 2. Call the callback function on the callback contract
+          ;; 3. Verify that the borrowed amount + fee has been repaid
+          ;; 4. If not repaid, revert the transaction
+          
+          ;; For this example, we're just updating the loan status
+          (map-set flash-loans
+            { loan-id: loan-id }
+            {
+              borrower: tx-sender,
+              asset-id: asset-id,
+              amount: amount,
+              fee: loan-fee,
+              is-active: false,
+              timestamp: stacks-block-height
+            }
+          )
+          
+          ;; Add the fee to the protocol fees
+          (var-set total-protocol-fees (+ (var-get total-protocol-fees) loan-fee))
+          
+          (ok loan-id)
+        )
+        ERR-POOL-INSUFFICIENT-LIQUIDITY
+      )
+    )
+  )
+)
+
