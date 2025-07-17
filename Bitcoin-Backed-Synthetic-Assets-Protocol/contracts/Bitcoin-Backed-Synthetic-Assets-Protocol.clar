@@ -80,3 +80,54 @@
   { asset-id: uint, owner: principal }
   { balance: uint }
 )
+
+;; Protocol Parameters controlled by governance
+(define-data-var protocol-paused bool false)
+(define-data-var governance-address principal tx-sender)
+(define-data-var treasury-address principal tx-sender)
+(define-data-var total-protocol-fees uint u0)
+
+(define-public (set-governance-address (new-address principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (ok (var-set governance-address new-address))
+  )
+)
+
+(define-public (set-treasury-address (new-address principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (ok (var-set treasury-address new-address))
+  )
+)
+
+(define-public (pause-protocol)
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (ok (var-set protocol-paused true))
+  )
+)
+
+(define-public (resume-protocol)
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (ok (var-set protocol-paused false))
+  )
+)
+
+(define-public (add-supported-asset (asset-id uint) (name (string-ascii 24)) (max-supply uint) (collateral-ratio uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (asserts! (>= collateral-ratio MIN-COLLATERALIZATION-RATIO) ERR-INVALID-AMOUNT)
+    (ok (map-set supported-assets 
+      { asset-id: asset-id } 
+      { 
+        name: name, 
+        is-active: true, 
+        max-supply: max-supply, 
+        current-supply: u0, 
+        collateral-ratio: collateral-ratio 
+      }
+    ))
+  )
+)
