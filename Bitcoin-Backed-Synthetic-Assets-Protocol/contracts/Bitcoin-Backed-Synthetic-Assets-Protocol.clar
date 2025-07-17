@@ -131,3 +131,16 @@
     ))
   )
 )
+
+(define-public (update-asset-status (asset-id uint) (is-active bool))
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (match (map-get? supported-assets { asset-id: asset-id })
+      asset-data (ok (map-set supported-assets 
+        { asset-id: asset-id } 
+        (merge asset-data { is-active: is-active })
+      ))
+      ERR-ASSET-NOT-SUPPORTED
+    )
+  )
+)
