@@ -144,3 +144,21 @@
     )
   )
 )
+
+(define-public (update-asset-price (asset-id uint) (price uint) (source principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get governance-address)) ERR-NOT-AUTHORIZED)
+    (asserts! (> price u0) ERR-INVALID-AMOUNT)
+    (ok (map-set asset-prices 
+      { asset-id: asset-id } 
+      { price: price, last-update: stacks-block-height, source: source }
+    ))
+  )
+)
+
+(define-public (get-asset-price (asset-id uint))
+  (match (map-get? asset-prices { asset-id: asset-id })
+    price-data (ok price-data)
+    ERR-ORACLE-DATA-UNAVAILABLE
+  )
+)
